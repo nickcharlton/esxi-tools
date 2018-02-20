@@ -15,19 +15,20 @@ def merge_dict(x, y):
 
 
 class VmdkClone(object):
-    def __init__(self, opts={}):
+    def __init__(self, source, destination, opts={}):
+        self.source = source
+        self.destination = destination
         self.opts = merge_dict({"snapshot": None, "disk-format": "thin"}, opts)
 
-    def run(self, source, destination):
-        source_disk_image = self._source_disk_image(source,
-                                                    self.opts["snapshot"])
+    def run(self):
+        source_disk_image = self.__find_source_disk_image()
 
         if source_disk_image is None:
             raise Exception("Source directory ({0} in /vmfs/volumes) must "
-                            "exist".format(source))
+                            "exist".format(self.source))
             return
 
-        destination_path = self._destination_path(source, destination)
+        destination_path = self.__build_destination_path()
         destination_directory = os.path.dirname(destination_path)
 
         if os.path.exists(destination_directory):
@@ -43,38 +44,39 @@ class VmdkClone(object):
                                destination_path,
                                "-d", self.opts["disk-format"]])
 
-    def _disk_paths(self):
+    def __find_disk_paths(self):
         return [os.path.join(dirpath, f)
                 for dirpath, dirnames, files in os.walk("/vmfs/volumes")
                 for f in files if f.endswith(".vmdk")]
 
-    def _source_disk_image(self, source, snapshot=None):
-        if snapshot is not None:
-            return self._snapshot_image(source, snapshot)
+    def __find_source_disk_image(self):
+        if self.opts["snapshot"] is not None:
+            return self.__find_snapshot_image()
         else:
-            return self._base_disk_image(source)
+            return self.__find_base_disk_image()
 
-    def _base_disk_image(self, source):
-        m = re.search("^[a-z0-9-/]+(?<=" + source +
+    def __find_base_disk_image(self):
+        disk_paths = self.__find_disk_paths()
+        m = re.search("^[a-z0-9-/]+(?<=" + self.source +
                       ")[a-z0-9-/]+(?<![0-9]{6})(?<!flat)(?<!delta)\.vmdk$",
-                      "\n".join(self._disk_paths()),
+                      "\n".join(disk_paths),
                       re.MULTILINE)
 
         return m.group() if m else None
 
-    def _snapshot_image(self, source, snapshot):
+    def __find_snapshot_image(self):
+        disk_paths = self.__find_disk_paths()
+        snapshot = self.opts["snapshot"]
         snapshot_number = "{0}".format(snapshot).zfill(6)
         m = re.search("^[a-z0-9-/]+(?<={0})[a-z0-9-/]+(?<={1})\.vmdk$".format(
-            source, snapshot_number),
-            "\n".join(self._disk_paths()), re.MULTILINE)
+            self.source, snapshot_number),
+            "\n".join(disk_paths), re.MULTILINE)
 
         return m.group() if m else None
 
-    def _destination_path(self, source, destination):
-        source_disk_image = self._source_disk_image(source,
-                                                    self.opts["snapshot"])
-        source_directory = os.path.dirname(source_disk_image)
-        source_volume = re.sub(source, destination, source_directory)
+    def __build_destination_path(self):
+        source_directory = os.path.dirname(self.__find_source_disk_image())
+        source_volume = re.sub(self.source, self.destination, source_directory)
 
         return "{0}/disk.vmdk".format(source_volume)
 
@@ -114,10 +116,10 @@ def main(argv):
         usage()
         sys.exit(2)
 
-    dc = VmdkClone(opts=clone_opts)
+    dc = VmdkClone(args[0], args[1], opts=clone_opts)
 
     try:
-        dc.run(args[0], args[1])
+        dc.run()
     except Exception as e:
         print(e)
         sys.exit(3)

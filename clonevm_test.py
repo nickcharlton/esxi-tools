@@ -14,8 +14,8 @@ class VmdkCloneTest(fake_filesystem_unittest.TestCase):
 
     def test_run_raises_exception_if_source_is_missing(self):
         with self.assertRaises(Exception) as context:
-            dc = VmdkClone()
-            dc.run("debian-9-x64", "debian-clone")
+            dc = VmdkClone("debian-9-x64", "debian-clone")
+            dc.run()
 
         self.assertTrue("Source directory (debian-9-x64 in /vmfs/volumes) "
                         "must exist" in context.exception)
@@ -25,8 +25,8 @@ class VmdkCloneTest(fake_filesystem_unittest.TestCase):
         self.stub_disk_image("debian-clone/disk.vmdk")
 
         with self.assertRaises(Exception) as context:
-            dc = VmdkClone()
-            dc.run("debian-9-x64", "debian-clone")
+            dc = VmdkClone("debian-9-x64", "debian-clone")
+            dc.run()
 
         self.assertTrue("Destination directory "
                         "(/vmfs/volumes/5f9a-fc0f/debian-clone) must not "
@@ -36,8 +36,8 @@ class VmdkCloneTest(fake_filesystem_unittest.TestCase):
     def test_run_creates_destination_directory(self, mock_check_call):
         self.stub_disk_image("debian-9-x64/disk.vmdk")
 
-        dc = VmdkClone()
-        dc.run("debian-9-x64", "debian-clone")
+        dc = VmdkClone("debian-9-x64", "debian-clone")
+        dc.run()
 
         destination_path = "/vmfs/volumes/5f9a-fc0f/debian-clone"
         self.assertTrue(os.path.exists(destination_path))
@@ -59,8 +59,8 @@ class VmdkCloneTest(fake_filesystem_unittest.TestCase):
         process_mock.configure_mock(**attrs)
         mock_check_call.return_value = process_mock
 
-        dc = VmdkClone()
-        dc.run("debian-9-x64", "debian-clone")
+        dc = VmdkClone("debian-9-x64", "debian-clone")
+        dc.run()
 
         mock_check_call.assert_called_once_with(
             ["vmkfstools",
@@ -88,8 +88,8 @@ class VmdkCloneTest(fake_filesystem_unittest.TestCase):
         process_mock.configure_mock(**attrs)
         mock_check_call.return_value = process_mock
 
-        dc = VmdkClone(opts={"snapshot": 2})
-        dc.run("ubuntu-1604-x64", "ubuntu-clone")
+        dc = VmdkClone("ubuntu-1604-x64", "ubuntu-clone", opts={"snapshot": 2})
+        dc.run()
 
         mock_check_call.assert_called_once_with(
             ["vmkfstools",
@@ -110,8 +110,9 @@ class VmdkCloneTest(fake_filesystem_unittest.TestCase):
         process_mock.configure_mock(**attrs)
         mock_check_call.return_value = process_mock
 
-        dc = VmdkClone(opts={"disk-format": "2gbsparse"})
-        dc.run("debian-9-x64", "debian-clone")
+        dc = VmdkClone("debian-9-x64", "debian-clone",
+                       opts={"disk-format": "2gbsparse"})
+        dc.run()
 
         mock_check_call.assert_called_once_with(
             ["vmkfstools",
