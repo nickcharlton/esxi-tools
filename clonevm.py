@@ -14,7 +14,7 @@ def merge_dict(x, y):
     return z
 
 
-class VmdkClone(object):
+class VmClone(object):
     def __init__(self, source, destination, opts={}):
         self.source = source
         self.destination = destination
@@ -28,6 +28,7 @@ class VmdkClone(object):
                             "exist".format(self.source))
             return
 
+        source_directory = os.path.dirname(source_disk_image)
         destination_path = self.__build_destination_path()
         destination_directory = os.path.dirname(destination_path)
 
@@ -44,10 +45,12 @@ class VmdkClone(object):
                                destination_path,
                                "-d", self.opts["disk-format"]])
 
-    def __find_disk_paths(self):
+        self.__copy_vmx(source_directory, destination_directory)
+
+    def __find_vm_paths(self):
         return [os.path.join(dirpath, f)
                 for dirpath, dirnames, files in os.walk("/vmfs/volumes")
-                for f in files if f.endswith(".vmdk")]
+                for f in files]
 
     def __find_source_disk_image(self):
         if self.opts["snapshot"] is not None:
@@ -56,7 +59,7 @@ class VmdkClone(object):
             return self.__find_base_disk_image()
 
     def __find_base_disk_image(self):
-        disk_paths = self.__find_disk_paths()
+        disk_paths = self.__find_vm_paths()
         m = re.search("^[a-z0-9-/]+(?<=" + self.source +
                       ")[a-z0-9-/]+(?<![0-9]{6})(?<!flat)(?<!delta)\.vmdk$",
                       "\n".join(disk_paths),
@@ -65,7 +68,7 @@ class VmdkClone(object):
         return m.group() if m else None
 
     def __find_snapshot_image(self):
-        disk_paths = self.__find_disk_paths()
+        disk_paths = self.__find_vm_paths()
         snapshot = self.opts["snapshot"]
         snapshot_number = "{0}".format(snapshot).zfill(6)
         m = re.search("^[a-z0-9-/]+(?<={0})[a-z0-9-/]+(?<={1})\.vmdk$".format(
@@ -79,6 +82,28 @@ class VmdkClone(object):
         source_volume = re.sub(self.source, self.destination, source_directory)
 
         return "{0}/disk.vmdk".format(source_volume)
+
+    def __find_source_vmx(self):
+        disk_paths = self.__find_vm_paths()
+        m = re.search("^[a-z0-9-/]+(?<=" + self.source +
+                      ")[a-z0-9-/]+(?<![0-9]{6})\.vmx$",
+                      "\n".join(disk_paths), re.MULTILINE)
+
+        return m.group() if m else None
+
+    def __copy_vmx(self, source_directory, destination_directory):
+        source_vmx = self.__find_source_vmx()
+        destination_vmx = os.path.join(destination_directory,
+                                       "{0}.vmx".format(self.destination))
+
+        with open(source_vmx, "r") as vmx_file:
+            source_vmx_contents = vmx_file.read()
+
+        destination_vmx_contents = source_vmx_contents.replace(
+            self.source, self.destination)
+
+        with open(destination_vmx, 'w') as vmx_file:
+            vmx_file.write(destination_vmx_contents)
 
 
 def usage():
@@ -116,7 +141,7 @@ def main(argv):
         usage()
         sys.exit(2)
 
-    dc = VmdkClone(args[0], args[1], opts=clone_opts)
+    dc = VmClone(args[0], args[1], opts=clone_opts)
 
     try:
         dc.run()
